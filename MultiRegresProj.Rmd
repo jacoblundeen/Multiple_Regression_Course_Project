@@ -1,0 +1,213 @@
+---
+title: "Multiple Regression Course Project"
+author: "Jacob M. Lundeen"
+date: "13 March 2019"
+output: 
+     pdf_document:
+          fig_height: 3.5
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(knitr)
+library(dplyr)
+library(rmarkdown)
+library(kableExtra)
+library(rsq)
+library(tidyr)
+library(tinytex)
+library(grid)
+library(gridExtra)
+
+```
+
+# Executive Summary
+
+Through the use of central tendency analysis with the confirmation by multiple regression to the formula mpg ~ am + wt + hp + (am * wt), we find that, in 1974, manual transmissions tended to be more fuel efficient than automatic transmissions.
+
+## Introduction: Automatics versus Manuals
+
+Which transmission type is more fuel efficient, automatics or manuals? This has long been a question posed by automotive enthusiasts for many decades. This analysis, using data collected by *Motor Trend* in 1974, will apply multiple regression models to that data in an attempt to answer that question.
+
+We start off with looking over the data, looking to understand what exactly we are looking at, looking for anything that seems out of the ordinary or may need to be addressed and cleaned.
+
+The mtcars data set is comprised of the following eleven numeric variables:
+
+* MPG - Miles/(US) gallon
+* CYL - Number of cylinders
+* DISP- Displacement (cu.in.)
+* HP - Gross horsepower
+* DRAT - Rear axle ratio
+* WT - Weight (1000 lbs)
+* QSEC - 1/4 mile time
+* VS - Engine (0 = V-shaped, 1 = straight)
+* AM - Transmission (0 = automatic, 1 = manual)
+* GEAR - Number of forward gears
+* CARB - Number of carburetors
+
+```{r preview, echo = FALSE}
+
+str(mtcars)
+
+```
+
+The initial look into the data shows no discrepencies or other issues to be concerned with. The only thing we would need to do is to change some of the variables over to factors: cyl, vs, am, gear and carb. From there, we will take a look at the central tendencies of the data.
+
+```{r central, echo = FALSE}
+
+d <- mtcars
+
+d$cyl <- factor(d$cyl)
+d$am <- factor(d$am, labels = c("Auto", "Manual"))
+d$vs <- factor(d$vs)
+d$gear <- factor(d$gear)
+d$carb <- factor(d$carb)
+
+mtcars_central <- setNames(data.frame(matrix(ncol = 4, nrow = 2), row.names = c("Auto", "Manual")), c("Mean", "Median", "Variance", "STD"))
+
+mtcars_central[1,1] <- round(mean(d$mpg[d$am == "Auto"]), 2)
+mtcars_central[2,1] <- round(mean(d$mpg[d$am == "Manual"]), 2)
+mtcars_central[1,2] <- round(median(d$mpg[d$am == "Auto"]), 2)
+mtcars_central[2,2] <- round(median(d$mpg[d$am == "Manual"]), 2)
+mtcars_central[1,3] <- round(var(d$mpg[d$am == "Auto"]), 2)
+mtcars_central[2,3] <- round(var(d$mpg[d$am == "Manual"]), 2)
+mtcars_central[1,4] <- round(sd(d$mpg[d$am == "Auto"]), 2)
+mtcars_central[2,4] <- round(sd(d$mpg[d$am == "Manual"]), 2)
+
+kable(mtcars_central, caption = "The central tendencies of the fuel efficiency data.") %>% kable_styling(latex_options = c("striped", "HOLD_position"), full_width = FALSE, position = "center")
+
+```
+
+So we see what we expected, the manual transmissions have a higher mean MPG than the automatics by 7.24 MPG. However, we also see a lower median value for the manuals (though still higher than the mean and median for the automatics), as well as a larger variance. So manual transmissions may, on average, have a higher MPG, but there seems to be a wider spread. A quick look tells us that while the manual data has a higher variance, none of the data points would constitute an outlier.
+
+```{r plot, echo = FALSE, fig.align = "center"}
+
+g1 <- ggplot(mtcars, aes(x = mpg, y = am)) + 
+     geom_point() + 
+     theme_bw() + 
+     labs(x = "Miles per Gallon", y = "Transmission Type", subtitle = "Original mtcars Data", caption = "0 represents automatic, 1 represents manual.") + 
+     ggtitle("Transmission Type versus Miles per Gallon") + 
+     geom_vline(colour = "red", size = 2, xintercept = mtcars_central[1,1]) + 
+     geom_text(aes(x = mtcars_central[1,1], y = 0.5), label = "Auto Mean = 17.15", hjust = 1.1, size = 4) +
+     geom_vline(colour = "red", size = 2, xintercept = mtcars_central[2,1]) + 
+     geom_text(aes(x = mtcars_central[2,1], y = 0.5), label = "Manual Mean = 24.39", hjust = -0.1, size = 4)
+
+```
+
+# Models
+
+### Linear Regression
+To continue our analysis, we now move to applying regression models. First, we will apply a standard linear model.
+
+```{r linear, echo = FALSE}
+
+fit1 <- lm(mpg ~ ., data = d)
+
+summary(fit1)
+
+mtcars_lm <- mtcars
+
+mtcars_lm$predicted <- predict(fit1)
+mtcars_lm$residuals <- resid(fit1)
+
+kable(mtcars_lm %>% select(mpg, predicted, residuals) %>% head(), caption = "Table Showing the Original MPG, LM Predicated Coefficients and the LM Residuals.") %>% kable_styling(latex_options = c("striped", "HOLD_position"), full_width = FALSE, position = "center")
+
+```
+
+From these first two pieces of data, we can see our coefficients, p-values, predicted and residual values from the linear model. While the R^2 is showing a strong fit, our p-values for the coefficient estimates show that we have a lot of regressors that are not statistically signficant to our outcome. Let us remove the least significant regressor, cyl, and see how it affects the rest.
+
+```{r linear2, echo = FALSE, fig.align = "center"}
+
+fit2 <- lm(mpg ~ . - cyl, data = d)
+
+#summary(fit2)
+
+```
+
+The model lm(mpg ~ . - cyl) has a similar R^2 and residuals, but the p-values for the remaining regressors have gotten more significant, with "wt" being the most significant at 0.102. I won't include all the iterations of model here, but the following model is what we found to fit the data the best.
+
+```{r linear3, echo=FALSE, fig.align = "center"}
+
+fit3 <- lm(mpg ~ wt + am + hp + (am * wt), data = mtcars)
+
+summary(fit3)
+
+mtcars_lm2 <- mtcars %>% select(mpg, wt, am, hp)
+
+mtcars_lm2$predicted <- predict(fit3)
+mtcars_lm2$residuals <- resid(fit3)
+
+kable(mtcars_lm2 %>% select(mpg, predicted, residuals) %>% head(), caption = "Table Showing the Original MPG, LM Predicated Coefficients and the LM Residuals.") %>% kable_styling(latex_options = c("striped", "HOLD_position"), full_width = FALSE, position = "center")
+
+qplot(seq_along(resid(fit3)), resid(fit3), xlab = "Index", ylab = "Residuals", main = "Residual Plot for Linear Model")
+
+```
+
+The chosen model includes four regressors: weight, transmission type, horsepower and an interaction term between transmission type and weight. To answer the initial question of this paper, we see our coefficient for transmission type is 11.55, meaning that manual transmissions are better for MPG. Of interest, our interaction term indicates that we can reject the null hypothesis and conclude that the mean mpg of manual transmission is significantly different from the mean mpg of automatic transmissions.
+
+The residual plot shows no apparant pattern, which lends credence to the use of our model.
+
+```{r plot2, echo=FALSE, fig.align = "center"}
+
+g5 <- ggplot(mtcars_lm2, aes(x = mpg, y = am)) + 
+     geom_point(aes(color = residuals)) + 
+     scale_color_gradient2(low = "dark blue", mid = "light blue", high = "red") + 
+     geom_point(aes(x = predicted), shape = 1) + 
+     theme_bw() + 
+     geom_segment(aes(xend = predicted, yend = am), alpha = 0.2) + 
+     labs(x = "Miles Per Gallon", y = "Transmission Type", title = "Residual Plot for Transmission Type versus Miles per Gallon", caption = "0 represents automatic, 1 represents manual.", subtitle = "Plot made using data from the mtcars data set.")
+
+```
+
+To keep the focus of this paper on the orignal question, the plots for the remaining regressors will be available in the appendix. Above, we have a nicer plot of the actual values connected to the predicted values with the residual values included as a color gradient. This is simply a more appealing way to show the relationship of the residuals to the actual values.
+
+## Inference
+
+Our final analysis will be performing a Welch Two Sample t-test with the two transmission types.What we see here is that with a p-value of 0.001, We can reject the null hypothesis and conclude that the mean mpg of manual transmission is significantly different from the mean mpg of automatic transmissions.
+
+```{r inference, echo = FALSE}
+
+blop <- t.test(mpg ~ am, data = mtcars)
+
+```
+
+# Summary
+
+Through the use of central tendency evaluation, and then the application of multiple linear regression, we can conclude that, in 1974, manual tranmissions were more fuel efficient, on average, than automatic transmissions. However, we discovered that the weight of the vehicle was the most signficant factor to determine a cars mileage, and that horsepower and the interaction between weight and transmission type were all significant factors.
+
+# Appendix
+```{r plot1, echo = FALSE, fig.align = "center", fig.height = 4}
+
+par(mfrow = c(2, 2))
+plot(fit3)
+par(mfrow = c(1, 1))
+
+pairs(mtcars_lm2)
+
+
+# g2 <- ggplot(mtcars_lm2, aes(x = mpg, y = wt)) + 
+#      geom_point(aes(color = residuals)) + 
+#      scale_color_gradient2(low = "dark blue", mid = "light blue", high = "red") + 
+#      geom_point(aes(x = predicted), shape = 1) + 
+#      theme_bw() + 
+#      geom_segment(aes(xend = predicted, yend = wt), alpha = 0.2) + 
+#      labs(x = "Miles Per Gallon", y = "Weight (1000 lbs)", title = "Weight vs. Miles per Gallon") + 
+#      geom_smooth(method = "lm", se = FALSE) + 
+#      theme(legend.position = "none")
+# 
+# g3 <- ggplot(mtcars_lm2, aes(x = mpg, y = hp)) + 
+#      geom_point(aes(color = residuals)) + 
+#      scale_color_gradient2(low = "dark blue", mid = "light blue", high = "red") + 
+#      geom_point(aes(x = predicted), shape = 1) + 
+#      theme_bw() + 
+#      geom_segment(aes(xend = predicted, yend = hp), alpha = 0.2) + 
+#      labs(x = "Miles Per Gallon", y = "Horsepower (Gross)", title = "Horsepower vs. Miles per Gallon") + 
+#      geom_smooth(method = "lm", se = FALSE) + 
+#      theme(legend.position = "none")
+# 
+# grid.arrange(g2, g3, ncol = 2)
+
+```
